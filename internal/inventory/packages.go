@@ -55,6 +55,7 @@ func removePackage(pm *packageManager, pkg string, log io.Writer) error {
 func runCmd(log io.Writer, name string, args ...string) error {
 	fmt.Fprintf(log, "[simplecd] $ %s %v\n", name, args)
 	cmd := exec.Command(name, args...)
+	cmd.Env = append(cmd.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	cmd.Stdout = log
 	cmd.Stderr = log
 	return cmd.Run()

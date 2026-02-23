@@ -1,12 +1,13 @@
 package cmd
 
-// templateExtraFile describes an additional file generated into .simplecd/ and
-// deployed as a second mapping entry in config.yaml.
+// templateExtraFile describes an additional file generated into .simplecd/.
+// If isHook is true it becomes the server_post hook instead of a deploy mapping.
 type templateExtraFile struct {
 	relPath  string // path relative to .simplecd/; <name> is replaced
 	content  string // file content; <name> is replaced
-	destPath string // absolute destination on the server; <name> is replaced
+	destPath string // absolute destination on the server; <name> is replaced (ignored for hooks)
 	mode     string // octal mode string, e.g. "0644"
+	isHook   bool   // if true: used as server_post hook, not as a mapping
 }
 
 // stackTemplate describes a predefined inventory + mapping guide for a tech stack.
@@ -185,6 +186,18 @@ services:
 `,
 				destPath: "/etc/nginx/sites-enabled/<name>",
 				mode:     "0644",
+			},
+			{
+				relPath: "start.sh",
+				content: `#!/bin/sh
+set -e
+# Remove default nginx site if still present
+rm -f /etc/nginx/sites-enabled/default
+# Test config before reloading
+nginx -t
+systemctl reload nginx
+`,
+				isHook: true,
 			},
 		},
 	},

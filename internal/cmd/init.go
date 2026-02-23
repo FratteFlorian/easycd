@@ -301,27 +301,41 @@ func Init(args []string) error {
 		return fmt.Errorf("creating .simplecd/: %w", err)
 	}
 
-	// Extra files from stack template (e.g. nginx vhost config)
+	// Extra files from stack template (e.g. nginx vhost config, hook scripts)
 	var extraMappings []extraMapping
+	var templatePostHook string // overrides the generic post-hook if set by template
 	if selectedTemplate != nil {
 		for _, ef := range selectedTemplate.extraFiles {
 			relPath := strings.ReplaceAll(ef.relPath, "<name>", projectName)
 			content := strings.ReplaceAll(ef.content, "<name>", projectName)
-			destPath := strings.ReplaceAll(ef.destPath, "<name>", projectName)
 			filePath := filepath.Join(simpleDir, relPath)
-			if err := os.WriteFile(filePath, []byte(content), 0644); err == nil {
+			perm := os.FileMode(0644)
+			if ef.isHook {
+				perm = 0755
+			}
+			if err := os.WriteFile(filePath, []byte(content), perm); err == nil {
 				fmt.Printf("Created .simplecd/%s\n", relPath)
-				extraMappings = append(extraMappings, extraMapping{
-					src:  ".simplecd/" + relPath,
-					dest: destPath,
-					mode: ef.mode,
-				})
+				if ef.isHook {
+					templatePostHook = ".simplecd/" + relPath
+				} else {
+					destPath := strings.ReplaceAll(ef.destPath, "<name>", projectName)
+					extraMappings = append(extraMappings, extraMapping{
+						src:  ".simplecd/" + relPath,
+						dest: destPath,
+						mode: ef.mode,
+					})
+				}
 			}
 		}
 	}
 
+	// Template-provided hook overrides the generic wizard selection
+	if templatePostHook != "" {
+		postAction = "custom"
+	}
+
 	// config.yaml
-	cfg := buildConfigYAML(projectName, serverURL, prefillToken, srcDir, destDir, excludes, extraMappings, unitFile, enableService, restartService, preAction, postAction, localHookPath, hasSystemd)
+	cfg := buildConfigYAML(projectName, serverURL, prefillToken, srcDir, destDir, excludes, extraMappings, templatePostHook, unitFile, enableService, restartService, preAction, postAction, localHookPath, hasSystemd)
 	if err := os.WriteFile(configPath, []byte(cfg), 0644); err != nil {
 		return err
 	}
@@ -394,7 +408,7 @@ type extraMapping struct {
 	mode string
 }
 
-func buildConfigYAML(name, server, token, src, dest string, excludes []string, extra []extraMapping, unitFile string, enableService, restartService bool, preAction, postAction, localHook string, hasSystemd bool) string {
+func buildConfigYAML(name, server, token, src, dest string, excludes []string, extra []extraMapping, templatePostHook string, unitFile string, enableService, restartService bool, preAction, postAction, localHook string, hasSystemd bool) string {
 	var sb strings.Builder
 
 	sb.WriteString("name: " + name + "\n")
@@ -445,10 +459,12 @@ func buildConfigYAML(name, server, token, src, dest string, excludes []string, e
 	if preAction != "none" && preAction != "" {
 		sb.WriteString("  server_pre: .simplecd/stop.sh\n")
 	}
-	if postAction != "none" && postAction != "" {
+	if templatePostHook != "" {
+		sb.WriteString("  server_post: " + templatePostHook + "\n")
+	} else if postAction != "none" && postAction != "" {
 		sb.WriteString("  server_post: .simplecd/start.sh\n")
 	}
-	if localHook == "" && (preAction == "none" || preAction == "") && (postAction == "none" || postAction == "") {
+	if localHook == "" && (preAction == "none" || preAction == "") && templatePostHook == "" && (postAction == "none" || postAction == "") {
 		sb.WriteString("  # local_pre: .simplecd/local-pre.sh\n")
 		sb.WriteString("  # server_pre: .simplecd/stop.sh\n")
 		sb.WriteString("  # server_post: .simplecd/start.sh\n")
