@@ -206,8 +206,13 @@ func RunProxmoxWizard(stdout io.Writer) (*ProxmoxResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generating SSH key: %w", err)
 	}
-	defer os.Remove(tmpKey)
-	defer os.Remove(tmpKey + ".pub")
+	defer func() {
+		for _, p := range []string{tmpKey, tmpKey + ".pub"} {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "warning: could not delete temp key %s: %v\n", p, err)
+			}
+		}
+	}()
 
 	lxcCfg := &proxmox.LXCCreateConfig{
 		VMID:          vmid,

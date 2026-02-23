@@ -1,3 +1,5 @@
 dist/
+.eacd/
 /eacd
+/eacdd
 *.log
