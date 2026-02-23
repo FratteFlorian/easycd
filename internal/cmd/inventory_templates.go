@@ -191,11 +191,11 @@ services:
 				relPath: "start.sh",
 				content: `#!/bin/sh
 set -e
-# Remove default nginx site if still present
-rm -f /etc/nginx/sites-enabled/default
-# Test config before reloading
+if [ -f /etc/nginx/sites-enabled/default ]; then
+    rm /etc/nginx/sites-enabled/default
+fi
 nginx -t
-systemctl reload nginx
+systemctl restart nginx
 `,
 				isHook: true,
 			},
