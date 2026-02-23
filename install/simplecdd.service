@@ -1,0 +1,12 @@
+[Unit]
+Description=simplecd deployment daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/simplecdd --config /etc/simplecd/server.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
