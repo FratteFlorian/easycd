@@ -26,6 +26,33 @@ eacd consists of two small binaries:
 
 The client computes SHA-256 hashes of your build output, asks the server which files actually changed, and uploads only the delta as a compressed archive. The server extracts it, reconciles system state (packages, services, users), and runs your hooks — all streamed back to your terminal in real time.
 
+```mermaid
+sequenceDiagram
+    participant D as eacd (dev machine)
+    participant P as Proxmox VE
+    participant S as eacdd (LXC container)
+
+    Note over D,P: eacd init (first time only)
+    D->>P: create LXC container
+    P-->>D: container IP
+    D->>S: install eacdd + generate token
+
+    Note over D,S: eacd deploy
+    D->>D: run local_pre hook
+    D->>D: SHA-256 hash build output
+    D->>S: POST /check {file hashes}
+    S-->>D: list of changed files
+    D->>D: pack delta → tar.gz
+    D->>S: POST /deploy (manifest + archive)
+    S->>S: run server_pre hook
+    S->>S: reconcile inventory (packages · services · users)
+    S->>S: backup existing files
+    S->>S: place files
+    S->>S: install / restart systemd unit
+    S->>S: run server_post hook
+    S-->>D: stream output (real-time) + STATUS:OK
+```
+
 ---
 
 ## Features
