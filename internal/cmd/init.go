@@ -101,6 +101,8 @@ func Init(args []string) error {
 	var hasBuildStep bool
 	var srcDir string
 
+	detected := detectProjectType(projectDir)
+
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -124,26 +126,68 @@ func Init(args []string) error {
 		).Run(); err != nil {
 			return err
 		}
-	} else {
-		srcDir = "./"
-		// Detect project type and suggest excludes
-		detected := detectProjectType(projectDir)
-		if detected != "" {
-			fmt.Printf("Detected project type: %s\n", detected)
-		}
 	}
 
 	if srcDir == "" {
 		srcDir = "./"
 	}
 
+	// --- Step 2.5: Stack template ---
+	templateOptions := []huh.Option[string]{
+		huh.NewOption("None", "none"),
+		huh.NewOption("Go", "go"),
+		huh.NewOption("Rust", "rust"),
+		huh.NewOption("Node.js", "nodejs"),
+		huh.NewOption("Python", "python"),
+		huh.NewOption("Java", "java"),
+		huh.NewOption("Laravel (PHP)", "laravel"),
+		huh.NewOption("Static site (nginx)", "nginx"),
+	}
+	templateKey := detectedKeyFor(detected)
+	if templateKey == "" {
+		templateKey = "none"
+	}
+
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().
+			Title("Stack template for inventory.yaml").
+			Description("Pre-fills system packages, services, and a mapping guide.").
+			Options(templateOptions...).
+			Value(&templateKey),
+	)).Run(); err != nil {
+		return err
+	}
+
+	var selectedTemplate *stackTemplate
+	var suggestedDest string
+	if tmpl, ok := stackTemplates[templateKey]; ok {
+		selectedTemplate = &tmpl
+		hint := strings.ReplaceAll(tmpl.mappingHint, "<name>", projectName)
+		fmt.Println()
+		fmt.Println("  ── Mapping guide ──────────────────────────────────────────────")
+		for _, line := range strings.Split(hint, "\n") {
+			fmt.Println(" " + line)
+		}
+		fmt.Println("  ───────────────────────────────────────────────────────────────")
+		fmt.Println()
+		if !hasBuildStep && tmpl.suggestedSrc != "" {
+			srcDir = tmpl.suggestedSrc
+		}
+		suggestedDest = tmpl.suggestedDest + "/" + projectName
+	}
+
 	// --- Step 3: Deploy destination ---
 	var destDir string
+	destPlaceholder := "/usr/local/bin"
+	if suggestedDest != "" {
+		destPlaceholder = suggestedDest
+	}
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Deploy destination on server").
 				Description("Absolute path on the CT. e.g. /usr/local/bin or /var/www/myapp").
+				Placeholder(destPlaceholder).
 				Value(&destDir).
 				Validate(func(s string) error {
 					if !strings.HasPrefix(s, "/") {
@@ -154,6 +198,9 @@ func Init(args []string) error {
 		),
 	).Run(); err != nil {
 		return err
+	}
+	if destDir == "" {
+		destDir = destPlaceholder
 	}
 
 	// Default excludes based on project type
@@ -285,6 +332,14 @@ func Init(args []string) error {
 		fmt.Println("Created .simplecd/local-pre.sh")
 	}
 
+	// inventory.yaml from stack template
+	if selectedTemplate != nil {
+		invPath := filepath.Join(simpleDir, "inventory.yaml")
+		if err := os.WriteFile(invPath, []byte(selectedTemplate.inventoryYAML), 0644); err == nil {
+			fmt.Println("Created .simplecd/inventory.yaml")
+		}
+	}
+
 	// Ensure .simplecd/ is excluded from git
 	if err := ensureGitignore(projectDir); err != nil {
 		fmt.Printf("warning: could not update .gitignore: %v\n", err)
@@ -292,7 +347,6 @@ func Init(args []string) error {
 		fmt.Println("Updated .gitignore (.simplecd/ excluded)")
 	}
 
-	// Suggest inventory.yaml
 	fmt.Println()
 	fmt.Println("Done! Next steps:")
 	step := 1
@@ -305,7 +359,11 @@ func Init(args []string) error {
 	}
 	fmt.Printf("  %d. Run: simplecd deploy\n", step)
 	step++
-	fmt.Printf("  %d. Optionally create .simplecd/inventory.yaml to manage system packages\n", step)
+	if selectedTemplate == nil {
+		fmt.Printf("  %d. Optionally create .simplecd/inventory.yaml to manage system packages\n", step)
+	} else {
+		fmt.Printf("  %d. Review .simplecd/inventory.yaml and adjust packages/services as needed\n", step)
+	}
 
 	return nil
 }
