@@ -133,11 +133,7 @@ Multiple `mappings` are supported — useful when you deploy a binary, a config 
 
 ## Inventory
 
-The `simplecd init` wizard offers built-in stack templates for **Go, Rust, Node.js, Python, Java, Laravel, and Static/nginx**. Selecting a template:
-- generates `.simplecd/inventory.yaml` with the right packages and services pre-filled
-- prints a mapping guide showing typical `src → dest` paths and hook suggestions
-
-You can also create or edit `.simplecd/inventory.yaml` manually at any time. simplecd diffs the desired state against the previous deploy and only acts on changes.
+Create `.simplecd/inventory.yaml` to declare the system state that must exist on the CT before your files land. simplecd diffs the desired state against the previous deploy and only acts on changes.
 
 ```yaml
 packages:

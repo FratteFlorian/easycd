@@ -101,8 +101,6 @@ func Init(args []string) error {
 	var hasBuildStep bool
 	var srcDir string
 
-	detected := detectProjectType(projectDir)
-
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -126,68 +124,26 @@ func Init(args []string) error {
 		).Run(); err != nil {
 			return err
 		}
+	} else {
+		srcDir = "./"
+		detected := detectProjectType(projectDir)
+		if detected != "" {
+			fmt.Printf("Detected project type: %s\n", detected)
+		}
 	}
 
 	if srcDir == "" {
 		srcDir = "./"
 	}
 
-	// --- Step 2.5: Stack template ---
-	templateOptions := []huh.Option[string]{
-		huh.NewOption("None", "none"),
-		huh.NewOption("Go", "go"),
-		huh.NewOption("Rust", "rust"),
-		huh.NewOption("Node.js", "nodejs"),
-		huh.NewOption("Python", "python"),
-		huh.NewOption("Java", "java"),
-		huh.NewOption("Laravel (PHP)", "laravel"),
-		huh.NewOption("Static site (nginx)", "nginx"),
-	}
-	templateKey := detectedKeyFor(detected)
-	if templateKey == "" {
-		templateKey = "none"
-	}
-
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().
-			Title("Stack template for inventory.yaml").
-			Description("Pre-fills system packages, services, and a mapping guide.").
-			Options(templateOptions...).
-			Value(&templateKey),
-	)).Run(); err != nil {
-		return err
-	}
-
-	var selectedTemplate *stackTemplate
-	var suggestedDest string
-	if tmpl, ok := stackTemplates[templateKey]; ok {
-		selectedTemplate = &tmpl
-		hint := strings.ReplaceAll(tmpl.mappingHint, "<name>", projectName)
-		fmt.Println()
-		fmt.Println("  ── Mapping guide ──────────────────────────────────────────────")
-		for _, line := range strings.Split(hint, "\n") {
-			fmt.Println(" " + line)
-		}
-		fmt.Println("  ───────────────────────────────────────────────────────────────")
-		fmt.Println()
-		if !hasBuildStep && tmpl.suggestedSrc != "" {
-			srcDir = tmpl.suggestedSrc
-		}
-		suggestedDest = tmpl.suggestedDest + "/" + projectName
-	}
-
 	// --- Step 3: Deploy destination ---
 	var destDir string
-	destPlaceholder := "/usr/local/bin"
-	if suggestedDest != "" {
-		destPlaceholder = suggestedDest
-	}
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Deploy destination on server").
 				Description("Absolute path on the CT. e.g. /usr/local/bin or /var/www/myapp").
-				Placeholder(destPlaceholder).
+				Placeholder("/usr/local/bin").
 				Value(&destDir).
 				Validate(func(s string) error {
 					if !strings.HasPrefix(s, "/") {
@@ -198,9 +154,6 @@ func Init(args []string) error {
 		),
 	).Run(); err != nil {
 		return err
-	}
-	if destDir == "" {
-		destDir = destPlaceholder
 	}
 
 	// Default excludes based on project type
@@ -301,41 +254,8 @@ func Init(args []string) error {
 		return fmt.Errorf("creating .simplecd/: %w", err)
 	}
 
-	// Extra files from stack template (e.g. nginx vhost config, hook scripts)
-	var extraMappings []extraMapping
-	var templatePostHook string // overrides the generic post-hook if set by template
-	if selectedTemplate != nil {
-		for _, ef := range selectedTemplate.extraFiles {
-			relPath := strings.ReplaceAll(ef.relPath, "<name>", projectName)
-			content := strings.ReplaceAll(ef.content, "<name>", projectName)
-			filePath := filepath.Join(simpleDir, relPath)
-			perm := os.FileMode(0644)
-			if ef.isHook {
-				perm = 0755
-			}
-			if err := os.WriteFile(filePath, []byte(content), perm); err == nil {
-				fmt.Printf("Created .simplecd/%s\n", relPath)
-				if ef.isHook {
-					templatePostHook = ".simplecd/" + relPath
-				} else {
-					destPath := strings.ReplaceAll(ef.destPath, "<name>", projectName)
-					extraMappings = append(extraMappings, extraMapping{
-						src:  ".simplecd/" + relPath,
-						dest: destPath,
-						mode: ef.mode,
-					})
-				}
-			}
-		}
-	}
-
-	// Template-provided hook overrides the generic wizard selection
-	if templatePostHook != "" {
-		postAction = "custom"
-	}
-
 	// config.yaml
-	cfg := buildConfigYAML(projectName, serverURL, prefillToken, srcDir, destDir, excludes, extraMappings, templatePostHook, unitFile, enableService, restartService, preAction, postAction, localHookPath, hasSystemd)
+	cfg := buildConfigYAML(projectName, serverURL, prefillToken, srcDir, destDir, excludes, unitFile, enableService, restartService, preAction, postAction, localHookPath, hasSystemd)
 	if err := os.WriteFile(configPath, []byte(cfg), 0644); err != nil {
 		return err
 	}
@@ -365,14 +285,6 @@ func Init(args []string) error {
 		fmt.Println("Created .simplecd/local-pre.sh")
 	}
 
-	// inventory.yaml from stack template
-	if selectedTemplate != nil {
-		invPath := filepath.Join(simpleDir, "inventory.yaml")
-		if err := os.WriteFile(invPath, []byte(selectedTemplate.inventoryYAML), 0644); err == nil {
-			fmt.Println("Created .simplecd/inventory.yaml")
-		}
-	}
-
 	// Ensure .simplecd/ is excluded from git
 	if err := ensureGitignore(projectDir); err != nil {
 		fmt.Printf("warning: could not update .gitignore: %v\n", err)
@@ -392,23 +304,12 @@ func Init(args []string) error {
 	}
 	fmt.Printf("  %d. Run: simplecd deploy\n", step)
 	step++
-	if selectedTemplate == nil {
-		fmt.Printf("  %d. Optionally create .simplecd/inventory.yaml to manage system packages\n", step)
-	} else {
-		fmt.Printf("  %d. Review .simplecd/inventory.yaml and adjust packages/services as needed\n", step)
-	}
+	fmt.Printf("  %d. Optionally create .simplecd/inventory.yaml to manage system packages\n", step)
 
 	return nil
 }
 
-// extraMapping is an additional src→dest mapping added to config.yaml.
-type extraMapping struct {
-	src  string
-	dest string
-	mode string
-}
-
-func buildConfigYAML(name, server, token, src, dest string, excludes []string, extra []extraMapping, templatePostHook string, unitFile string, enableService, restartService bool, preAction, postAction, localHook string, hasSystemd bool) string {
+func buildConfigYAML(name, server, token, src, dest string, excludes []string, unitFile string, enableService, restartService bool, preAction, postAction, localHook string, hasSystemd bool) string {
 	var sb strings.Builder
 
 	sb.WriteString("name: " + name + "\n")
@@ -435,16 +336,6 @@ func buildConfigYAML(name, server, token, src, dest string, excludes []string, e
 			sb.WriteString("        - \"" + e + "\"\n")
 		}
 	}
-	for _, m := range extra {
-		mode := m.mode
-		if mode == "" {
-			mode = "0644"
-		}
-		sb.WriteString("    - src: " + m.src + "\n")
-		sb.WriteString("      dest: " + m.dest + "\n")
-		sb.WriteString("      mode: \"" + mode + "\"\n")
-	}
-
 	if hasSystemd && unitFile != "" {
 		sb.WriteString("\n  systemd:\n")
 		sb.WriteString("    unit: " + unitFile + "\n")
@@ -459,12 +350,10 @@ func buildConfigYAML(name, server, token, src, dest string, excludes []string, e
 	if preAction != "none" && preAction != "" {
 		sb.WriteString("  server_pre: .simplecd/stop.sh\n")
 	}
-	if templatePostHook != "" {
-		sb.WriteString("  server_post: " + templatePostHook + "\n")
-	} else if postAction != "none" && postAction != "" {
+	if postAction != "none" && postAction != "" {
 		sb.WriteString("  server_post: .simplecd/start.sh\n")
 	}
-	if localHook == "" && (preAction == "none" || preAction == "") && templatePostHook == "" && (postAction == "none" || postAction == "") {
+	if localHook == "" && (preAction == "none" || preAction == "") && (postAction == "none" || postAction == "") {
 		sb.WriteString("  # local_pre: .simplecd/local-pre.sh\n")
 		sb.WriteString("  # server_pre: .simplecd/stop.sh\n")
 		sb.WriteString("  # server_post: .simplecd/start.sh\n")
