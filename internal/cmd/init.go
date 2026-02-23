@@ -301,8 +301,27 @@ func Init(args []string) error {
 		return fmt.Errorf("creating .simplecd/: %w", err)
 	}
 
+	// Extra files from stack template (e.g. nginx vhost config)
+	var extraMappings []extraMapping
+	if selectedTemplate != nil {
+		for _, ef := range selectedTemplate.extraFiles {
+			relPath := strings.ReplaceAll(ef.relPath, "<name>", projectName)
+			content := strings.ReplaceAll(ef.content, "<name>", projectName)
+			destPath := strings.ReplaceAll(ef.destPath, "<name>", projectName)
+			filePath := filepath.Join(simpleDir, relPath)
+			if err := os.WriteFile(filePath, []byte(content), 0644); err == nil {
+				fmt.Printf("Created .simplecd/%s\n", relPath)
+				extraMappings = append(extraMappings, extraMapping{
+					src:  ".simplecd/" + relPath,
+					dest: destPath,
+					mode: ef.mode,
+				})
+			}
+		}
+	}
+
 	// config.yaml
-	cfg := buildConfigYAML(projectName, serverURL, prefillToken, srcDir, destDir, excludes, unitFile, enableService, restartService, preAction, postAction, localHookPath, hasSystemd)
+	cfg := buildConfigYAML(projectName, serverURL, prefillToken, srcDir, destDir, excludes, extraMappings, unitFile, enableService, restartService, preAction, postAction, localHookPath, hasSystemd)
 	if err := os.WriteFile(configPath, []byte(cfg), 0644); err != nil {
 		return err
 	}
@@ -368,7 +387,14 @@ func Init(args []string) error {
 	return nil
 }
 
-func buildConfigYAML(name, server, token, src, dest string, excludes []string, unitFile string, enableService, restartService bool, preAction, postAction, localHook string, hasSystemd bool) string {
+// extraMapping is an additional src→dest mapping added to config.yaml.
+type extraMapping struct {
+	src  string
+	dest string
+	mode string
+}
+
+func buildConfigYAML(name, server, token, src, dest string, excludes []string, extra []extraMapping, unitFile string, enableService, restartService bool, preAction, postAction, localHook string, hasSystemd bool) string {
 	var sb strings.Builder
 
 	sb.WriteString("name: " + name + "\n")
@@ -394,6 +420,15 @@ func buildConfigYAML(name, server, token, src, dest string, excludes []string, u
 		for _, e := range excludes {
 			sb.WriteString("        - \"" + e + "\"\n")
 		}
+	}
+	for _, m := range extra {
+		mode := m.mode
+		if mode == "" {
+			mode = "0644"
+		}
+		sb.WriteString("    - src: " + m.src + "\n")
+		sb.WriteString("      dest: " + m.dest + "\n")
+		sb.WriteString("      mode: \"" + mode + "\"\n")
 	}
 
 	if hasSystemd && unitFile != "" {

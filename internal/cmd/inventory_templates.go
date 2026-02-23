@@ -1,5 +1,14 @@
 package cmd
 
+// templateExtraFile describes an additional file generated into .simplecd/ and
+// deployed as a second mapping entry in config.yaml.
+type templateExtraFile struct {
+	relPath  string // path relative to .simplecd/; <name> is replaced
+	content  string // file content; <name> is replaced
+	destPath string // absolute destination on the server; <name> is replaced
+	mode     string // octal mode string, e.g. "0644"
+}
+
 // stackTemplate describes a predefined inventory + mapping guide for a tech stack.
 type stackTemplate struct {
 	label         string
@@ -7,6 +16,7 @@ type stackTemplate struct {
 	suggestedDest string // suggested dest prefix (appended with project name)
 	mappingHint   string // printed before the dest-dir question; <name> is replaced
 	inventoryYAML string // written to .simplecd/inventory.yaml
+	extraFiles    []templateExtraFile // additional files generated in .simplecd/
 }
 
 // stackTemplates holds the available presets keyed by a short identifier.
@@ -142,13 +152,14 @@ packages: []
 		label:         "Static site (nginx)",
 		suggestedSrc:  "./dist",
 		suggestedDest: "/var/www",
-		mappingHint: `  src:  ./dist          → /var/www/<name>/
-  mode: "0644"
+		mappingHint: `  Mapping 1 — static files:
+    src:  ./dist          → /var/www/<name>/
+    mode: "0644"
 
-  nginx serves files from /var/www/<name>.
-  Tip: deploy your nginx vhost config via a second mapping:
+  Mapping 2 — nginx vhost (auto-generated as .simplecd/<name>.conf):
     src:  .simplecd/<name>.conf  → /etc/nginx/sites-enabled/<name>
-  Then reload nginx in server_post: systemctl reload nginx`,
+
+  server_post hook: systemctl reload nginx`,
 		inventoryYAML: `packages:
   - nginx
 
@@ -157,6 +168,25 @@ services:
     enabled: true
     state: started
 `,
+		extraFiles: []templateExtraFile{
+			{
+				relPath: "<name>.conf",
+				content: `server {
+    listen 80;
+    server_name _;
+
+    root /var/www/<name>;
+    index index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+`,
+				destPath: "/etc/nginx/sites-enabled/<name>",
+				mode:     "0644",
+			},
+		},
 	},
 }
 
