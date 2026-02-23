@@ -19,6 +19,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+	case "rollback":
+		if err := cmd.Rollback(os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	case "init":
 		if err := cmd.Init(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -36,5 +41,6 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
 	fmt.Fprintln(os.Stderr, "  init [--reinit]  Initialize (or reinitialize) .simplecd/ configuration")
-	fmt.Fprintln(os.Stderr, "  deploy  Deploy the project to the configured server")
+	fmt.Fprintln(os.Stderr, "  deploy           Deploy the project to the configured server")
+	fmt.Fprintln(os.Stderr, "  rollback         Restore the previous deployment snapshot")
 }

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/flo-mic/simplecd/internal/api"
 	"github.com/flo-mic/simplecd/internal/archive"
@@ -21,6 +23,48 @@ import (
 )
 
 var deployMu sync.Mutex
+
+// rateLimiter is a simple sliding-window per-IP rate limiter.
+type rateLimiter struct {
+	mu       sync.Mutex
+	requests map[string][]time.Time
+	limit    int
+	window   time.Duration
+}
+
+func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+	return &rateLimiter{requests: make(map[string][]time.Time), limit: limit, window: window}
+}
+
+func (rl *rateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	cutoff := now.Add(-rl.window)
+	var valid []time.Time
+	for _, t := range rl.requests[ip] {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) >= rl.limit {
+		rl.requests[ip] = valid
+		return false
+	}
+	rl.requests[ip] = append(valid, now)
+	return true
+}
+
+func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if !rl.allow(ip) {
+			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	cfgPath := flag.String("config", "/etc/simplecd/server.yaml", "Path to server config")
@@ -47,9 +91,17 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(io.MultiWriter(os.Stdout, logFile), nil))
 	slog.SetDefault(logger)
 
+	checkRL := newRateLimiter(60, time.Minute)  // 60 checks/min per IP
+	deployRL := newRateLimiter(10, time.Minute) // 10 deploys/min per IP
+
 	mux := http.NewServeMux()
-	mux.Handle("/check", auth.Middleware(cfg.Token, http.HandlerFunc(handleCheck)))
-	mux.Handle("/deploy", auth.Middleware(cfg.Token, http.HandlerFunc(handleDeploy)))
+	mux.Handle("/check", checkRL.middleware(auth.Middleware(cfg.Token, http.HandlerFunc(handleCheck))))
+	mux.Handle("/deploy", deployRL.middleware(auth.Middleware(cfg.Token, http.HandlerFunc(handleDeploy))))
+	mux.Handle("/rollback", deployRL.middleware(auth.Middleware(cfg.Token, http.HandlerFunc(handleRollback))))
+	mux.Handle("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ok")
+	}))
 
 	slog.Info("simplecdd starting", "listen", cfg.Listen)
 	if err := http.ListenAndServe(cfg.Listen, mux); err != nil {
@@ -161,6 +213,15 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Backup existing files for rollback
+	var destPaths []string
+	for _, f := range manifest.Files {
+		destPaths = append(destPaths, f.Dest)
+	}
+	if err := deploy.BackupFiles(manifest.Name, destPaths); err != nil {
+		fmt.Fprintf(log, "[simplecd] WARNING: backup failed (rollback unavailable): %v\n", err)
+	}
+
 	// Server pre-hook
 	if manifest.Hooks != nil && manifest.Hooks.ServerPre != "" {
 		scriptPath := filepath.Join(tmpDir, manifest.Hooks.ServerPre)
@@ -206,6 +267,47 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("deployment complete", "project", manifest.Name)
 	fmt.Fprintf(log, "[simplecd] Deployment complete\n")
+}
+
+// handleRollback restores the previous deployment snapshot for a project.
+func handleRollback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		http.Error(w, "bad request: missing project name", http.StatusBadRequest)
+		return
+	}
+
+	if !deployMu.TryLock() {
+		http.Error(w, "deployment in progress, try again later", http.StatusConflict)
+		return
+	}
+	defer deployMu.Unlock()
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	log := &flushWriter{w: w}
+
+	if !deploy.RollbackAvailable(req.Name) {
+		fmt.Fprintf(log, "[simplecd] ERROR: no rollback snapshot available for %q\n", req.Name)
+		return
+	}
+
+	fmt.Fprintf(log, "[simplecd] Rolling back %s...\n", req.Name)
+	if err := deploy.RestoreBackup(req.Name, log); err != nil {
+		fmt.Fprintf(log, "[simplecd] ERROR: rollback failed: %v\n", err)
+		return
+	}
+
+	slog.Info("rollback complete", "project", req.Name)
+	fmt.Fprintf(log, "[simplecd] Rollback complete\n")
 }
 
 // flushWriter wraps a ResponseWriter and flushes after each write for streaming.

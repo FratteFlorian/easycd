@@ -64,7 +64,7 @@ func (c *Client) get(path string, result interface{}) error {
 func (c *Client) post(path string, params url.Values) (string, error) {
 	encoded := params.Encode()
 	if os.Getenv("SIMPLECD_DEBUG") != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] POST %s\n[DEBUG] body: %s\n[DEBUG] auth header: %s\n", c.baseURL+path, encoded, c.token)
+		fmt.Fprintf(os.Stderr, "[DEBUG] POST %s\n[DEBUG] body: %s\n[DEBUG] auth header: %s\n", c.baseURL+path, encoded, maskToken(c.token))
 	}
 	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, bytes.NewBufferString(encoded))
 	if err != nil {
@@ -116,6 +116,17 @@ func (c *Client) post(path string, params url.Values) (string, error) {
 func (c *Client) Ping() error {
 	var result interface{}
 	return c.get("/version", &result)
+}
+
+func maskToken(t string) string {
+	// Show prefix up to "=" after tokenid, then mask the secret
+	if i := len("PVEAPIToken="); len(t) > i {
+		rest := t[i:]
+		if j := len(rest) - 8; j > 0 {
+			return t[:i] + rest[:j] + "****"
+		}
+	}
+	return "****"
 }
 
 func decodeData(r io.Reader, result interface{}) error {

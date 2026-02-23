@@ -28,15 +28,14 @@ func Reconcile(project string, desired *api.Inventory, log io.Writer) error {
 	// --- Packages ---
 	toAdd, toRemove := diffStrings(desired.Packages, stored.Packages)
 
-	// Update global ownership before install/remove
-	updateOwnership(gs, project, desired.Packages, stored.Packages)
-
 	if len(toAdd) > 0 {
 		fmt.Fprintf(log, "[simplecd] Installing packages: %v\n", toAdd)
 		if err := installPackages(pm, toAdd, log); err != nil {
 			return fmt.Errorf("installing packages: %w", err)
 		}
 	}
+	// Update ownership only after successful install
+	updateOwnership(gs, project, desired.Packages, stored.Packages)
 	for _, pkg := range toRemove {
 		owners := gs.PackageOwners[pkg]
 		if len(owners) > 0 {

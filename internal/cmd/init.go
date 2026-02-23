@@ -285,6 +285,13 @@ func Init(args []string) error {
 		fmt.Println("Created .simplecd/local-pre.sh")
 	}
 
+	// Ensure .simplecd/ is excluded from git
+	if err := ensureGitignore(projectDir); err != nil {
+		fmt.Printf("warning: could not update .gitignore: %v\n", err)
+	} else {
+		fmt.Println("Updated .gitignore (.simplecd/ excluded)")
+	}
+
 	// Suggest inventory.yaml
 	fmt.Println()
 	fmt.Println("Done! Next steps:")
@@ -406,6 +413,30 @@ func detectProjectType(dir string) string {
 		}
 	}
 	return ""
+}
+
+// ensureGitignore adds ".simplecd/" to the project's .gitignore if not already present.
+func ensureGitignore(projectDir string) error {
+	const entry = ".simplecd/"
+	gitignorePath := filepath.Join(projectDir, ".gitignore")
+
+	var existing string
+	if data, err := os.ReadFile(gitignorePath); err == nil {
+		existing = string(data)
+		for _, line := range strings.Split(existing, "\n") {
+			if strings.TrimSpace(line) == entry {
+				return nil // already present
+			}
+		}
+	}
+
+	var content string
+	if existing != "" && !strings.HasSuffix(existing, "\n") {
+		content = existing + "\n" + entry + "\n"
+	} else {
+		content = existing + entry + "\n"
+	}
+	return os.WriteFile(gitignorePath, []byte(content), 0644)
 }
 
 func defaultExcludes(dir string) []string {
