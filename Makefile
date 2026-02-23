@@ -1,4 +1,4 @@
-.PHONY: build build-client build-server install-server test clean
+.PHONY: build build-client build-server build-release install-server test clean
 
 build-client:
 	go build -o dist/eacd ./cmd/eacd
@@ -7,6 +7,15 @@ build-server:
 	GOOS=linux GOARCH=amd64 go build -o dist/eacdd ./cmd/eacdd
 
 build: build-client build-server
+
+# Cross-platform release artifacts (used by install.sh / install-daemon.sh)
+build-release:
+	GOOS=linux   GOARCH=amd64 go build -o dist/eacd-linux-amd64   ./cmd/eacd
+	GOOS=linux   GOARCH=arm64 go build -o dist/eacd-linux-arm64   ./cmd/eacd
+	GOOS=darwin  GOARCH=amd64 go build -o dist/eacd-darwin-amd64  ./cmd/eacd
+	GOOS=darwin  GOARCH=arm64 go build -o dist/eacd-darwin-arm64  ./cmd/eacd
+	GOOS=linux   GOARCH=amd64 go build -o dist/eacdd-linux-amd64  ./cmd/eacdd
+	cp install/eacdd.service dist/eacdd.service
 
 test:
 	go test ./...

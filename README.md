@@ -40,6 +40,24 @@ The client computes SHA-256 hashes of your build output, asks the server which f
 
 ---
 
+## Install
+
+**Client (`eacd`) — Linux & macOS:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FratteFlorian/easycd/main/install.sh | sh
+```
+
+**Daemon (`eacdd`) — Linux/amd64 server:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FratteFlorian/easycd/main/install-daemon.sh | sh
+```
+
+> Both scripts download the latest release from GitHub. To pin a version: `EACD_VERSION=v0.1.0 curl ... | sh`
+
+---
+
 ## Quick start
 
 ### Option A — Proxmox wizard (recommended)
