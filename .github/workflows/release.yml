@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+
+          # simplecd (client) — runs on the developer's machine
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/simplecd-linux-amd64   ./cmd/simplecd
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/simplecd-linux-arm64   ./cmd/simplecd
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o dist/simplecd-darwin-amd64  ./cmd/simplecd
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o dist/simplecd-darwin-arm64  ./cmd/simplecd
+
+          # simplecdd (server daemon) — Linux only, runs on the CT
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/simplecdd-linux-amd64  ./cmd/simplecdd
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/simplecdd-linux-arm64  ./cmd/simplecdd
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
