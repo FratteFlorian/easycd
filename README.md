@@ -443,6 +443,14 @@ tailscale up
 
 ---
 
+## 🤝 Feedback & Contributing
+
+This project is in its early stages. If you use Proxmox and hate deployment overhead as much as I do, I'd love to hear your thoughts!
+
+What's missing for your workflow? [Open an issue](https://github.com/FratteFlorian/easycd/issues) or start a [discussion](https://github.com/FratteFlorian/easycd/discussions) — all feedback welcome.
+
+---
+
 ## License
 
 MIT
