@@ -218,6 +218,11 @@ log_dir: /var/log/simplecd
 
 Logs are written to `<log_dir>/simplecdd.log` and to stdout.
 
+> **Security notice:** simplecd does not configure any firewall rules. Securing the host is entirely your responsibility. A reasonable baseline:
+> - Close all ports except SSH with UFW: `ufw default deny incoming && ufw allow ssh && ufw enable`
+> - Do **not** expose port 8765 publicly — keep it LAN-only or behind a VPN (see [Using simplecd with a public VPS](#using-simplecd-with-a-public-vps))
+> - Expose your application to the internet via [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) or a reverse proxy, not by opening ports directly
+
 ---
 
 ## Proxmox config
