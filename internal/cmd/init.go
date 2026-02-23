@@ -161,7 +161,7 @@ func Init(args []string) error {
 
 	// --- Step 4: Systemd? ---
 	var hasSystemd bool
-	var unitFile, serviceName string
+	var unitFile string
 	var enableService, restartService bool
 
 	if err := huh.NewForm(
@@ -178,10 +178,6 @@ func Init(args []string) error {
 		if err := huh.NewForm(
 			huh.NewGroup(
 				huh.NewInput().
-					Title("Service name").
-					Description("e.g. my-tool  (the .service suffix is added automatically)").
-					Value(&serviceName),
-				huh.NewInput().
 					Title("Path to systemd unit file").
 					Description("Relative to project root. e.g. .simplecd/my-tool.service").
 					Placeholder(".simplecd/my-tool.service").
@@ -196,21 +192,12 @@ func Init(args []string) error {
 		).Run(); err != nil {
 			return err
 		}
-		_ = serviceName // used in template generation
 	}
 
 	// --- Step 5: Hooks ---
 	var preAction, postAction string
 
-	preOptions := []huh.Option[string]{
-		huh.NewOption("Stop systemd service", "stop_service"),
-		huh.NewOption("Kill process by name", "kill_process"),
-		huh.NewOption("Custom script", "custom"),
-		huh.NewOption("None", "none"),
-	}
-	postOptions := []huh.Option[string]{
-		huh.NewOption("Start systemd service", "start_service"),
-		huh.NewOption("Restart systemd service", "restart_service"),
+	hookOptions := []huh.Option[string]{
 		huh.NewOption("Custom script", "custom"),
 		huh.NewOption("None", "none"),
 	}
@@ -218,12 +205,14 @@ func Init(args []string) error {
 	if err := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
-				Title("Server action BEFORE deploying files").
-				Options(preOptions...).
+				Title("Server hook BEFORE deploying files").
+				Description("Script runs as root on the CT. e.g. stop a service, create a backup").
+				Options(hookOptions...).
 				Value(&preAction),
 			huh.NewSelect[string]().
-				Title("Server action AFTER deploying files").
-				Options(postOptions...).
+				Title("Server hook AFTER deploying files").
+				Description("Script runs as root on the CT. e.g. start/reload a service").
+				Options(hookOptions...).
 				Value(&postAction),
 		),
 	).Run(); err != nil {
@@ -264,16 +253,14 @@ func Init(args []string) error {
 	// pre-deploy script
 	if preAction != "none" && preAction != "" {
 		scriptPath := filepath.Join(simpleDir, "stop.sh")
-		content := generatePreScript(preAction, serviceName)
-		os.WriteFile(scriptPath, []byte(content), 0755)
+		os.WriteFile(scriptPath, []byte("#!/bin/sh\nset -e\n# Runs as root on the CT before files are placed.\n# e.g.: systemctl stop my-service\n"), 0755)
 		fmt.Println("Created .simplecd/stop.sh")
 	}
 
 	// post-deploy script
 	if postAction != "none" && postAction != "" {
 		scriptPath := filepath.Join(simpleDir, "start.sh")
-		content := generatePostScript(postAction, serviceName)
-		os.WriteFile(scriptPath, []byte(content), 0755)
+		os.WriteFile(scriptPath, []byte("#!/bin/sh\nset -e\n# Runs as root on the CT after files are placed.\n# e.g.: systemctl restart my-service\n"), 0755)
 		fmt.Println("Created .simplecd/start.sh")
 	}
 
@@ -362,39 +349,6 @@ func buildConfigYAML(name, server, token, src, dest string, excludes []string, u
 	return sb.String()
 }
 
-func generatePreScript(action, serviceName string) string {
-	switch action {
-	case "stop_service":
-		svc := serviceName
-		if svc == "" {
-			svc = "my-service"
-		}
-		return fmt.Sprintf("#!/bin/sh\nset -e\nsystemctl stop %s || true\n", svc+".service")
-	case "kill_process":
-		return "#!/bin/sh\n# Kill process by name\n# pkill -f my-process || true\n"
-	default:
-		return "#!/bin/sh\nset -e\n# Custom pre-deploy script\n"
-	}
-}
-
-func generatePostScript(action, serviceName string) string {
-	switch action {
-	case "start_service":
-		svc := serviceName
-		if svc == "" {
-			svc = "my-service"
-		}
-		return fmt.Sprintf("#!/bin/sh\nset -e\nsystemctl start %s\n", svc+".service")
-	case "restart_service":
-		svc := serviceName
-		if svc == "" {
-			svc = "my-service"
-		}
-		return fmt.Sprintf("#!/bin/sh\nset -e\nsystemctl restart %s\n", svc+".service")
-	default:
-		return "#!/bin/sh\nset -e\n# Custom post-deploy script\n"
-	}
-}
 
 func detectProjectType(dir string) string {
 	checks := map[string]string{

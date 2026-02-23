@@ -121,9 +121,11 @@ deploy:
 
 hooks:
   local_pre:   .simplecd/local-pre.sh   # runs on your machine before upload
-  server_pre:  .simplecd/stop.sh        # runs on the CT before files are placed
-  server_post: .simplecd/start.sh       # runs on the CT after files are placed
+  server_pre:  .simplecd/stop.sh        # runs as root on the CT before files are placed
+  server_post: .simplecd/start.sh       # runs as root on the CT after files are placed
 ```
+
+> **Note:** `server_pre` and `server_post` scripts execute as **root** on the CT. Write them yourself — `simplecd init` creates empty stubs. A non-zero exit code in `server_pre` aborts the deployment; `server_post` failure is logged as a warning but does not fail the deploy.
 
 **Token resolution order:** `SIMPLECD_TOKEN` env var → `token:` field in config.
 
