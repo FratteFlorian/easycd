@@ -133,20 +133,19 @@ Multiple `mappings` are supported — useful when you deploy a binary, a config 
 
 ## Inventory
 
-Create `.simplecd/inventory.yaml` to declare the system state that must exist on the CT before your files land. simplecd diffs the desired state against the previous deploy and only acts on changes.
+Create `.simplecd/inventory.yaml` to declare the system state that must exist on the CT before your files land. simplecd diffs the desired state against the previous deploy and only acts on changes — it installs packages that are new, removes packages that were dropped, and reconciles service states.
+
+### Full reference
 
 ```yaml
 packages:
   - nginx
-  - postgresql-client
+  - curl
 
 services:
   - name: nginx
-    enabled: true
-    state: started
-  - name: my-old-service
-    enabled: false
-    state: stopped
+    enabled: true       # enable/disable on boot
+    state: started      # "started" or "stopped"
 
 users:
   - name: appuser
@@ -155,6 +154,84 @@ users:
     groups:
       - www-data
 ```
+
+### Example: nginx + static HTML site
+
+This is a complete setup for deploying a static site. The project structure looks like this:
+
+```
+my-site/
+├── dist/               ← built HTML/CSS/JS (deployed to /var/www/my-site)
+└── .simplecd/
+    ├── config.yaml
+    ├── inventory.yaml
+    ├── my-site.conf    ← nginx vhost config (deployed to /etc/nginx/sites-enabled/)
+    └── start.sh        ← reloads nginx after deploy
+```
+
+**.simplecd/config.yaml**
+
+```yaml
+name: my-site
+server: http://192.168.1.50:8765
+# token: use SIMPLECD_TOKEN env var
+
+deploy:
+  mappings:
+    - src: ./dist
+      dest: /var/www/my-site
+      mode: "0644"
+      dir_mode: "0755"
+    - src: .simplecd/my-site.conf
+      dest: /etc/nginx/sites-enabled/my-site
+      mode: "0644"
+
+hooks:
+  server_post: .simplecd/start.sh
+```
+
+**.simplecd/inventory.yaml**
+
+```yaml
+packages:
+  - nginx
+
+services:
+  - name: nginx
+    enabled: true
+    state: started
+```
+
+**.simplecd/my-site.conf**
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+
+    root /var/www/my-site;
+    index index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+**.simplecd/start.sh**
+
+```sh
+#!/bin/sh
+set -e
+if [ -f /etc/nginx/sites-enabled/default ]; then
+    rm /etc/nginx/sites-enabled/default
+fi
+nginx -t
+systemctl restart nginx
+```
+
+On the first deploy simplecd installs nginx, enables and starts it, places the HTML files and the vhost config, then runs `start.sh` which removes the default nginx site and restarts nginx.
+Every subsequent deploy only uploads changed files and skips the package install entirely.
 
 **Package ownership tracking** — if two projects both declare `curl`, it won't be removed when one of them drops it. Ownership state is stored at `/var/lib/simplecd/.global/package-owners.json`.
 
