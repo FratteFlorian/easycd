@@ -7,18 +7,18 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/flo-mic/simplecd/internal/api"
+	"github.com/flo-mic/eacd/internal/api"
 )
 
 // ensureUser creates a system user if it doesn't already exist.
 // Users are never automatically deleted.
 func ensureUser(u api.InventoryUser, log io.Writer) error {
 	if _, err := user.Lookup(u.Name); err == nil {
-		fmt.Fprintf(log, "[simplecd] User %s already exists, skipping\n", u.Name)
+		fmt.Fprintf(log, "[eacd] User %s already exists, skipping\n", u.Name)
 		return nil
 	}
 
-	fmt.Fprintf(log, "[simplecd] Creating user: %s\n", u.Name)
+	fmt.Fprintf(log, "[eacd] Creating user: %s\n", u.Name)
 
 	args := []string{"--system"}
 

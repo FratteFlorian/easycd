@@ -13,13 +13,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flo-mic/simplecd/internal/api"
-	"github.com/flo-mic/simplecd/internal/archive"
-	"github.com/flo-mic/simplecd/internal/auth"
-	"github.com/flo-mic/simplecd/internal/config"
-	"github.com/flo-mic/simplecd/internal/delta"
-	"github.com/flo-mic/simplecd/internal/deploy"
-	"github.com/flo-mic/simplecd/internal/inventory"
+	"github.com/flo-mic/eacd/internal/api"
+	"github.com/flo-mic/eacd/internal/archive"
+	"github.com/flo-mic/eacd/internal/auth"
+	"github.com/flo-mic/eacd/internal/config"
+	"github.com/flo-mic/eacd/internal/delta"
+	"github.com/flo-mic/eacd/internal/deploy"
+	"github.com/flo-mic/eacd/internal/inventory"
 )
 
 var deployMu sync.Mutex
@@ -67,7 +67,7 @@ func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	cfgPath := flag.String("config", "/etc/simplecd/server.yaml", "Path to server config")
+	cfgPath := flag.String("config", "/etc/eacd/server.yaml", "Path to server config")
 	flag.Parse()
 
 	cfg, err := config.LoadServerConfig(*cfgPath)
@@ -81,7 +81,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logFile, err := os.OpenFile(filepath.Join(cfg.LogDir, "simplecdd.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile(filepath.Join(cfg.LogDir, "eacdd.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error opening log file: %v\n", err)
 		os.Exit(1)
@@ -103,7 +103,7 @@ func main() {
 		fmt.Fprintln(w, "ok")
 	}))
 
-	slog.Info("simplecdd starting", "listen", cfg.Listen)
+	slog.Info("eacdd starting", "listen", cfg.Listen)
 	if err := http.ListenAndServe(cfg.Listen, mux); err != nil {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
@@ -164,51 +164,60 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	log := &flushWriter{w: w}
 
+	success := false
+	defer func() {
+		if success {
+			fmt.Fprintf(log, "[eacd] STATUS:OK\n")
+		} else {
+			fmt.Fprintf(log, "[eacd] STATUS:FAIL\n")
+		}
+	}()
+
 	mr, err := r.MultipartReader()
 	if err != nil {
-		fmt.Fprintf(log, "[simplecd] ERROR: reading multipart: %v\n", err)
+		fmt.Fprintf(log, "[eacd] ERROR: reading multipart: %v\n", err)
 		return
 	}
 
 	// Part 1: manifest
 	manifestPart, err := mr.NextPart()
 	if err != nil || manifestPart.FormName() != "manifest" {
-		fmt.Fprintf(log, "[simplecd] ERROR: expected 'manifest' part\n")
+		fmt.Fprintf(log, "[eacd] ERROR: expected 'manifest' part\n")
 		return
 	}
 	var manifest api.Manifest
 	if err := json.NewDecoder(manifestPart).Decode(&manifest); err != nil {
-		fmt.Fprintf(log, "[simplecd] ERROR: parsing manifest: %v\n", err)
+		fmt.Fprintf(log, "[eacd] ERROR: parsing manifest: %v\n", err)
 		return
 	}
 
 	// Part 2: archive
 	archivePart, err := mr.NextPart()
 	if err != nil || archivePart.FormName() != "archive" {
-		fmt.Fprintf(log, "[simplecd] ERROR: expected 'archive' part\n")
+		fmt.Fprintf(log, "[eacd] ERROR: expected 'archive' part\n")
 		return
 	}
 
 	// Extract archive to temp dir
-	tmpDir, err := os.MkdirTemp("", "simplecd-")
+	tmpDir, err := os.MkdirTemp("", "eacd-")
 	if err != nil {
-		fmt.Fprintf(log, "[simplecd] ERROR: creating temp dir: %v\n", err)
+		fmt.Fprintf(log, "[eacd] ERROR: creating temp dir: %v\n", err)
 		return
 	}
 	defer os.RemoveAll(tmpDir)
 
 	if err := archive.Extract(archivePart, tmpDir, ""); err != nil {
-		fmt.Fprintf(log, "[simplecd] ERROR: extracting archive: %v\n", err)
+		fmt.Fprintf(log, "[eacd] ERROR: extracting archive: %v\n", err)
 		return
 	}
 
-	fmt.Fprintf(log, "[simplecd] Starting deployment of %s\n", manifest.Name)
+	fmt.Fprintf(log, "[eacd] Starting deployment of %s\n", manifest.Name)
 
 	// Inventory reconciliation (before file placement)
 	if manifest.Inventory != nil {
-		fmt.Fprintf(log, "[simplecd] Reconciling inventory...\n")
+		fmt.Fprintf(log, "[eacd] Reconciling inventory...\n")
 		if err := inventory.Reconcile(manifest.Name, manifest.Inventory, log); err != nil {
-			fmt.Fprintf(log, "[simplecd] ERROR: inventory reconciliation: %v\n", err)
+			fmt.Fprintf(log, "[eacd] ERROR: inventory reconciliation: %v\n", err)
 			return
 		}
 	}
@@ -219,7 +228,7 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		destPaths = append(destPaths, f.Dest)
 	}
 	if err := deploy.BackupFiles(manifest.Name, destPaths); err != nil {
-		fmt.Fprintf(log, "[simplecd] WARNING: backup failed (rollback unavailable): %v\n", err)
+		fmt.Fprintf(log, "[eacd] WARNING: backup failed (rollback unavailable): %v\n", err)
 	}
 
 	// Server pre-hook
@@ -227,7 +236,7 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		scriptPath := filepath.Join(tmpDir, manifest.Hooks.ServerPre)
 		if err := os.Chmod(scriptPath, 0755); err == nil {
 			if err := deploy.RunHook(scriptPath, log); err != nil {
-				fmt.Fprintf(log, "[simplecd] ERROR: pre-hook: %v\n", err)
+				fmt.Fprintf(log, "[eacd] ERROR: pre-hook: %v\n", err)
 				return
 			}
 		}
@@ -236,12 +245,12 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 	// Place files
 	for _, f := range manifest.Files {
 		if f.ArchivePath == "" {
-			fmt.Fprintf(log, "[simplecd] Skipping %s (unchanged)\n", f.Dest)
+			fmt.Fprintf(log, "[eacd] Skipping %s (unchanged)\n", f.Dest)
 			continue
 		}
 		src := filepath.Join(tmpDir, f.ArchivePath)
 		if err := deploy.PlaceFile(src, f.Dest, f.Mode, log); err != nil {
-			fmt.Fprintf(log, "[simplecd] ERROR: placing %s: %v\n", f.Dest, err)
+			fmt.Fprintf(log, "[eacd] ERROR: placing %s: %v\n", f.Dest, err)
 			return
 		}
 	}
@@ -250,7 +259,7 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if manifest.Systemd != nil && manifest.Systemd.UnitArchivePath != "" {
 		src := filepath.Join(tmpDir, manifest.Systemd.UnitArchivePath)
 		if err := deploy.InstallUnit(src, manifest.Systemd.UnitDest, manifest.Systemd.Enable, manifest.Systemd.Restart, log); err != nil {
-			fmt.Fprintf(log, "[simplecd] ERROR: systemd: %v\n", err)
+			fmt.Fprintf(log, "[eacd] ERROR: systemd: %v\n", err)
 			return
 		}
 	}
@@ -260,13 +269,14 @@ func handleDeploy(w http.ResponseWriter, r *http.Request) {
 		scriptPath := filepath.Join(tmpDir, manifest.Hooks.ServerPost)
 		if err := os.Chmod(scriptPath, 0755); err == nil {
 			if err := deploy.RunHook(scriptPath, log); err != nil {
-				fmt.Fprintf(log, "[simplecd] WARNING: post-hook failed: %v\n", err)
+				fmt.Fprintf(log, "[eacd] WARNING: post-hook failed: %v\n", err)
 			}
 		}
 	}
 
 	slog.Info("deployment complete", "project", manifest.Name)
-	fmt.Fprintf(log, "[simplecd] Deployment complete\n")
+	fmt.Fprintf(log, "[eacd] Deployment complete\n")
+	success = true
 }
 
 // handleRollback restores the previous deployment snapshot for a project.
@@ -295,19 +305,29 @@ func handleRollback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	log := &flushWriter{w: w}
 
+	success := false
+	defer func() {
+		if success {
+			fmt.Fprintf(log, "[eacd] STATUS:OK\n")
+		} else {
+			fmt.Fprintf(log, "[eacd] STATUS:FAIL\n")
+		}
+	}()
+
 	if !deploy.RollbackAvailable(req.Name) {
-		fmt.Fprintf(log, "[simplecd] ERROR: no rollback snapshot available for %q\n", req.Name)
+		fmt.Fprintf(log, "[eacd] ERROR: no rollback snapshot available for %q\n", req.Name)
 		return
 	}
 
-	fmt.Fprintf(log, "[simplecd] Rolling back %s...\n", req.Name)
+	fmt.Fprintf(log, "[eacd] Rolling back %s...\n", req.Name)
 	if err := deploy.RestoreBackup(req.Name, log); err != nil {
-		fmt.Fprintf(log, "[simplecd] ERROR: rollback failed: %v\n", err)
+		fmt.Fprintf(log, "[eacd] ERROR: rollback failed: %v\n", err)
 		return
 	}
 
 	slog.Info("rollback complete", "project", req.Name)
-	fmt.Fprintf(log, "[simplecd] Rollback complete\n")
+	fmt.Fprintf(log, "[eacd] Rollback complete\n")
+	success = true
 }
 
 // flushWriter wraps a ResponseWriter and flushes after each write for streaming.

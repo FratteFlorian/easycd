@@ -19,12 +19,11 @@ type CheckResponse struct {
 
 // Manifest is the JSON part of the multipart deploy request.
 type Manifest struct {
-	Name     string        `json:"name"`
-	Files    []FileEntry   `json:"files"`
-	Scripts  *ScriptsEntry `json:"scripts,omitempty"`
-	Systemd  *SystemdEntry `json:"systemd,omitempty"`
-	Hooks    *HooksEntry   `json:"hooks,omitempty"`
-	Inventory *Inventory   `json:"inventory,omitempty"`
+	Name      string        `json:"name"`
+	Files     []FileEntry   `json:"files"`
+	Systemd   *SystemdEntry `json:"systemd,omitempty"`
+	Hooks     *HooksEntry   `json:"hooks,omitempty"`
+	Inventory *Inventory    `json:"inventory,omitempty"`
 }
 
 // FileEntry describes a single file to be placed on the server.
@@ -34,12 +33,6 @@ type FileEntry struct {
 	Dest        string `json:"dest"`
 	Mode        string `json:"mode"`
 	Hash        string `json:"hash"`
-}
-
-// ScriptsEntry holds archive paths for server-side hook scripts.
-type ScriptsEntry struct {
-	ServerPreArchivePath  string `json:"server_pre_archive_path,omitempty"`
-	ServerPostArchivePath string `json:"server_post_archive_path,omitempty"`
 }
 
 // SystemdEntry describes an optional systemd unit to install.

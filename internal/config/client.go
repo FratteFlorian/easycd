@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ClientConfig is loaded from .simplecd/config.yaml in the project root.
+// ClientConfig is loaded from .eacd/config.yaml in the project root.
 type ClientConfig struct {
 	Name   string       `yaml:"name"`
 	Server string       `yaml:"server"`
@@ -45,9 +45,9 @@ type ClientHooks struct {
 	ServerPost string `yaml:"server_post"`
 }
 
-// LoadClientConfig reads and parses .simplecd/config.yaml from the given directory.
+// LoadClientConfig reads and parses .eacd/config.yaml from the given directory.
 func LoadClientConfig(projectDir string) (*ClientConfig, error) {
-	path := projectDir + "/.simplecd/config.yaml"
+	path := projectDir + "/.eacd/config.yaml"
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %w", path, err)

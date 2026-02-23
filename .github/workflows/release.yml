@@ -24,15 +24,15 @@ jobs:
         run: |
           mkdir -p dist
 
-          # simplecd (client) — runs on the developer's machine
-          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/simplecd-linux-amd64   ./cmd/simplecd
-          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/simplecd-linux-arm64   ./cmd/simplecd
-          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o dist/simplecd-darwin-amd64  ./cmd/simplecd
-          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o dist/simplecd-darwin-arm64  ./cmd/simplecd
+          # eacd (client) — runs on the developer's machine
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/eacd-linux-amd64   ./cmd/eacd
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/eacd-linux-arm64   ./cmd/eacd
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o dist/eacd-darwin-amd64  ./cmd/eacd
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o dist/eacd-darwin-arm64  ./cmd/eacd
 
-          # simplecdd (server daemon) — Linux only, runs on the CT
-          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/simplecdd-linux-amd64  ./cmd/simplecdd
-          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/simplecdd-linux-arm64  ./cmd/simplecdd
+          # eacdd (server daemon) — Linux only, runs on the CT
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/eacdd-linux-amd64  ./cmd/eacdd
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/eacdd-linux-arm64  ./cmd/eacdd
 
       - name: Create release
         uses: softprops/action-gh-release@v2

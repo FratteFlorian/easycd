@@ -47,7 +47,3 @@ type Template struct {
 	Size     int64  `json:"size"`
 }
 
-// apiResponse wraps the Proxmox API JSON envelope.
-type apiResponse struct {
-	Data interface{} `json:"data"`
-}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/flo-mic/simplecd/internal/api"
+	"github.com/flo-mic/eacd/internal/api"
 )
 
 // Reconcile brings the system state in line with the desired inventory.
@@ -29,7 +29,7 @@ func Reconcile(project string, desired *api.Inventory, log io.Writer) error {
 	toAdd, toRemove := diffStrings(desired.Packages, stored.Packages)
 
 	if len(toAdd) > 0 {
-		fmt.Fprintf(log, "[simplecd] Installing packages: %v\n", toAdd)
+		fmt.Fprintf(log, "[eacd] Installing packages: %v\n", toAdd)
 		if err := installPackages(pm, toAdd, log); err != nil {
 			return fmt.Errorf("installing packages: %w", err)
 		}
@@ -39,13 +39,13 @@ func Reconcile(project string, desired *api.Inventory, log io.Writer) error {
 	for _, pkg := range toRemove {
 		owners := gs.PackageOwners[pkg]
 		if len(owners) > 0 {
-			fmt.Fprintf(log, "[simplecd] Skipping removal of %s (still needed by: %v)\n", pkg, owners)
+			fmt.Fprintf(log, "[eacd] Skipping removal of %s (still needed by: %v)\n", pkg, owners)
 			continue
 		}
-		fmt.Fprintf(log, "[simplecd] Removing package: %s\n", pkg)
+		fmt.Fprintf(log, "[eacd] Removing package: %s\n", pkg)
 		if err := removePackage(pm, pkg, log); err != nil {
 			// Non-fatal: log and continue
-			fmt.Fprintf(log, "[simplecd] WARNING: could not remove %s: %v\n", pkg, err)
+			fmt.Fprintf(log, "[eacd] WARNING: could not remove %s: %v\n", pkg, err)
 		}
 		delete(gs.PackageOwners, pkg)
 	}

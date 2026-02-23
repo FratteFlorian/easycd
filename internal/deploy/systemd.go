@@ -33,7 +33,7 @@ func InstallUnit(srcPath, unitDest string, enable, restart bool, log io.Writer) 
 }
 
 func runSystemctl(log io.Writer, args ...string) error {
-	fmt.Fprintf(log, "[simplecd] systemctl %v\n", args)
+	fmt.Fprintf(log, "[eacd] systemctl %v\n", args)
 	cmd := exec.Command("systemctl", args...)
 	cmd.Stdout = log
 	cmd.Stderr = log

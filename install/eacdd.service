@@ -1,10 +1,10 @@
 [Unit]
-Description=simplecd deployment daemon
+Description=eacd deployment daemon
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/simplecdd --config /etc/simplecd/server.yaml
+ExecStart=/usr/local/bin/eacdd --config /etc/eacd/server.yaml
 Restart=on-failure
 RestartSec=5
 

@@ -1,26 +1,28 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/flo-mic/simplecd/internal/config"
+	"github.com/flo-mic/eacd/internal/config"
 )
 
 // Rollback sends a rollback request to the server for the current project.
 func Rollback(args []string, stdout, stderr io.Writer) error {
-	dir := "."
-	for _, a := range args {
-		if a != "--" {
-			dir = a
-		}
+	fs := flag.NewFlagSet("rollback", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	dir := fs.String("dir", ".", "Project directory (default: current directory)")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	projectDir, err := filepath.Abs(dir)
+	projectDir, err := filepath.Abs(*dir)
 	if err != nil {
 		return fmt.Errorf("resolving project dir: %w", err)
 	}
@@ -30,12 +32,12 @@ func Rollback(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	token := os.Getenv("SIMPLECD_TOKEN")
+	token := os.Getenv("EACD_TOKEN")
 	if token == "" && cfg.Token != "" {
 		token = cfg.Token
 	}
 	if token == "" {
-		return fmt.Errorf("no auth token: set SIMPLECD_TOKEN or add 'token:' to .simplecd/config.yaml")
+		return fmt.Errorf("no auth token: set EACD_TOKEN or add 'token:' to .eacd/config.yaml")
 	}
 
 	body, _ := json.Marshal(map[string]string{"name": cfg.Name})
@@ -45,10 +47,9 @@ func Rollback(args []string, stdout, stderr io.Writer) error {
 	}
 	defer resp.Body.Close()
 
-	io.Copy(stdout, resp.Body)
-
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("rollback failed with status %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("rollback failed (%d): %s", resp.StatusCode, bytes.TrimSpace(errBody))
 	}
-	return nil
+	return streamAndCheck(resp.Body, stdout, "rollback failed (see output above)")
 }

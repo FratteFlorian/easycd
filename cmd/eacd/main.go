@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/flo-mic/simplecd/internal/cmd"
+	"github.com/flo-mic/eacd/internal/cmd"
 )
 
 func main() {
@@ -37,10 +37,10 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: simplecd <command>")
+	fmt.Fprintln(os.Stderr, "Usage: eacd <command>")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  init [--reinit]  Initialize (or reinitialize) .simplecd/ configuration")
+	fmt.Fprintln(os.Stderr, "  init [--reinit]  Initialize (or reinitialize) .eacd/ configuration")
 	fmt.Fprintln(os.Stderr, "  deploy           Deploy the project to the configured server")
 	fmt.Fprintln(os.Stderr, "  rollback         Restore the previous deployment snapshot")
 }

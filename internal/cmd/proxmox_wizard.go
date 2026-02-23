@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/flo-mic/simplecd/internal/config"
-	"github.com/flo-mic/simplecd/internal/proxmox"
+	"github.com/flo-mic/eacd/internal/config"
+	"github.com/flo-mic/eacd/internal/proxmox"
 )
 
 // ProxmoxResult holds the outcomes of a successful CT provisioning.
@@ -241,7 +241,7 @@ func RunProxmoxWizard(stdout io.Writer) (*ProxmoxResult, error) {
 	}
 
 	// SSH bootstrap using the temporary key
-	fmt.Fprintln(stdout, "  Installing simplecdd on the container...")
+	fmt.Fprintln(stdout, "  Installing eacdd on the container...")
 	if err := bootstrapContainer(ip, tmpKey, token, stdout); err != nil {
 		return nil, fmt.Errorf("bootstrap failed: %w\n\nYou can retry manually:\n  make install-server CT_HOST=%s", err, ip)
 	}
@@ -318,7 +318,7 @@ func loadOrPromptProxmoxConfig() (*config.ProxmoxConfig, error) {
 	var save bool
 	if err := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().
-			Title("Save Proxmox config to ~/.config/simplecd/proxmox.yaml?").
+			Title("Save Proxmox config to ~/.config/eacd/proxmox.yaml?").
 			Value(&save),
 	)).Run(); err != nil {
 		return nil, err
@@ -332,11 +332,11 @@ func loadOrPromptProxmoxConfig() (*config.ProxmoxConfig, error) {
 	return cfg, nil
 }
 
-// bootstrapContainer copies simplecdd to the CT and sets up the service using key-based SSH.
+// bootstrapContainer copies eacdd to the CT and sets up the service using key-based SSH.
 func bootstrapContainer(ip, keyPath, token string, stdout io.Writer) error {
-	binaryPath := findSimplecddBinary()
+	binaryPath := findEacddBinary()
 	if binaryPath == "" {
-		return fmt.Errorf("dist/simplecdd not found — run 'make build-server' first")
+		return fmt.Errorf("dist/eacdd not found — run 'make build-server' first")
 	}
 
 	serviceFile := findServiceFile()
@@ -357,39 +357,39 @@ func bootstrapContainer(ip, keyPath, token string, stdout io.Writer) error {
 		return fmt.Errorf("SSH not available: %w", err)
 	}
 
-	// Copy simplecdd binary
-	fmt.Fprintln(stdout, "  Copying simplecdd binary...")
-	if err := scpFile(binaryPath, target+":/usr/local/bin/simplecdd", sshArgs); err != nil {
-		return fmt.Errorf("scp simplecdd: %w", err)
+	// Copy eacdd binary
+	fmt.Fprintln(stdout, "  Copying eacdd binary...")
+	if err := scpFile(binaryPath, target+":/usr/local/bin/eacdd", sshArgs); err != nil {
+		return fmt.Errorf("scp eacdd: %w", err)
 	}
 
 	// Copy service file if available
 	if serviceFile != "" {
 		fmt.Fprintln(stdout, "  Copying systemd unit...")
-		if err := scpFile(serviceFile, target+":/etc/systemd/system/simplecdd.service", sshArgs); err != nil {
+		if err := scpFile(serviceFile, target+":/etc/systemd/system/eacdd.service", sshArgs); err != nil {
 			return fmt.Errorf("scp service file: %w", err)
 		}
 	}
 
-	serverYAML := fmt.Sprintf("listen: :8765\ntoken: %s\nlog_dir: /var/log/simplecd\n", token)
+	serverYAML := fmt.Sprintf("listen: :8765\ntoken: %s\nlog_dir: /var/log/eacd\n", token)
 	setupScript := fmt.Sprintf(`set -e
-chmod +x /usr/local/bin/simplecdd
-mkdir -p /etc/simplecd /var/log/simplecd /var/lib/simplecd/.global
-cat > /etc/simplecd/server.yaml << 'YAMLEOF'
+chmod +x /usr/local/bin/eacdd
+mkdir -p /etc/eacd /var/log/eacd /var/lib/eacd/.global
+cat > /etc/eacd/server.yaml << 'YAMLEOF'
 %sYAMLEOF
 systemctl daemon-reload
-systemctl enable --now simplecdd
-echo "simplecdd installed and running"
+systemctl enable --now eacdd
+echo "eacdd installed and running"
 `, serverYAML)
 
 	if serviceFile == "" {
 		inlineUnit := `[Unit]
-Description=simplecd deployment daemon
+Description=eacd deployment daemon
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/simplecdd --config /etc/simplecd/server.yaml
+ExecStart=/usr/local/bin/eacdd --config /etc/eacd/server.yaml
 Restart=on-failure
 RestartSec=5
 
@@ -397,15 +397,15 @@ RestartSec=5
 WantedBy=multi-user.target
 `
 		setupScript = fmt.Sprintf(`set -e
-chmod +x /usr/local/bin/simplecdd
-mkdir -p /etc/simplecd /var/log/simplecd /var/lib/simplecd/.global
-cat > /etc/systemd/system/simplecdd.service << 'SVCEOF'
+chmod +x /usr/local/bin/eacdd
+mkdir -p /etc/eacd /var/log/eacd /var/lib/eacd/.global
+cat > /etc/systemd/system/eacdd.service << 'SVCEOF'
 %sSVCEOF
-cat > /etc/simplecd/server.yaml << 'YAMLEOF'
+cat > /etc/eacd/server.yaml << 'YAMLEOF'
 %sYAMLEOF
 systemctl daemon-reload
-systemctl enable --now simplecdd
-echo "simplecdd installed and running"
+systemctl enable --now eacdd
+echo "eacdd installed and running"
 `, inlineUnit, serverYAML)
 	}
 
@@ -429,8 +429,8 @@ func waitForSSH(ip, keyPath string, timeoutSec int) error {
 		fmt.Sprintf("root@%s", ip),
 		"true",
 	}
-	deadline := timeoutSec / 3
-	for i := 0; i < deadline; i++ {
+	maxAttempts := timeoutSec / 3
+	for i := 0; i < maxAttempts; i++ {
 		cmd := exec.Command("ssh", args...)
 		if err := cmd.Run(); err == nil {
 			return nil
@@ -458,7 +458,7 @@ func sshRun(target, script string, sshArgs []string, stdout io.Writer) error {
 
 // generateTempSSHKey creates a temporary ed25519 key pair and returns (privateKeyPath, publicKeyContent, error).
 func generateTempSSHKey() (string, string, error) {
-	keyPath := filepath.Join(os.TempDir(), fmt.Sprintf("simplecd_bootstrap_%d", os.Getpid()))
+	keyPath := filepath.Join(os.TempDir(), fmt.Sprintf("eacd_bootstrap_%d", os.Getpid()))
 	cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-f", keyPath, "-N", "", "-q")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", "", fmt.Errorf("ssh-keygen: %w: %s", err, out)
@@ -478,13 +478,13 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func findSimplecddBinary() string {
+func findEacddBinary() string {
 	// Try common locations relative to executable
 	exe, _ := os.Executable()
 	candidates := []string{
-		"dist/simplecdd",
-		filepath.Join(filepath.Dir(exe), "dist/simplecdd"),
-		filepath.Join(filepath.Dir(exe), "simplecdd"),
+		"dist/eacdd",
+		filepath.Join(filepath.Dir(exe), "dist/eacdd"),
+		filepath.Join(filepath.Dir(exe), "eacdd"),
 	}
 	if runtime.GOOS == "windows" {
 		for i, c := range candidates {
@@ -501,8 +501,8 @@ func findSimplecddBinary() string {
 
 func findServiceFile() string {
 	candidates := []string{
-		"install/simplecdd.service",
-		"simplecdd.service",
+		"install/eacdd.service",
+		"eacdd.service",
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {

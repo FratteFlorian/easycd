@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ServerConfig is loaded from /etc/simplecd/server.yaml on the CT.
+// ServerConfig is loaded from /etc/eacd/server.yaml on the CT.
 type ServerConfig struct {
 	Listen string `yaml:"listen"`   // e.g. ":8765"
 	Token  string `yaml:"token"`
@@ -33,7 +33,7 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		cfg.Listen = ":8765"
 	}
 	if cfg.LogDir == "" {
-		cfg.LogDir = "/var/log/simplecd"
+		cfg.LogDir = "/var/log/eacd"
 	}
 
 	return &cfg, nil

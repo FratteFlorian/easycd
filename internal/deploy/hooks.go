@@ -9,7 +9,7 @@ import (
 // RunHook executes a shell command via /bin/sh -c.
 // Output is written to log. Returns an error if the command exits non-zero.
 func RunHook(cmd string, log io.Writer) error {
-	fmt.Fprintf(log, "[simplecd] Running hook: %s\n", cmd)
+	fmt.Fprintf(log, "[eacd] Running hook: %s\n", cmd)
 	c := exec.Command("/bin/sh", "-c", cmd)
 	c.Stdout = log
 	c.Stderr = log

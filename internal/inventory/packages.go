@@ -41,19 +41,19 @@ func updatePackageIndex(pm *packageManager, log io.Writer) error {
 
 func installPackages(pm *packageManager, pkgs []string, log io.Writer) error {
 	if err := updatePackageIndex(pm, log); err != nil {
-		fmt.Fprintf(log, "[simplecd] warning: package index update failed: %v\n", err)
+		fmt.Fprintf(log, "[eacd] warning: package index update failed: %v\n", err)
 	}
-	args := append(pm.install, pkgs...)
+	args := append(append([]string{}, pm.install...), pkgs...)
 	return runCmd(log, args[0], args[1:]...)
 }
 
 func removePackage(pm *packageManager, pkg string, log io.Writer) error {
-	args := append(pm.remove, pkg)
+	args := append(append([]string{}, pm.remove...), pkg)
 	return runCmd(log, args[0], args[1:]...)
 }
 
 func runCmd(log io.Writer, name string, args ...string) error {
-	fmt.Fprintf(log, "[simplecd] $ %s %v\n", name, args)
+	fmt.Fprintf(log, "[eacd] $ %s %v\n", name, args)
 	cmd := exec.Command(name, args...)
 	cmd.Env = append(cmd.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	cmd.Stdout = log

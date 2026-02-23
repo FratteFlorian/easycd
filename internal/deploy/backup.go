@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const rollbackDir = "/var/lib/simplecd"
+const rollbackDir = "/var/lib/eacd"
 
 func rollbackBase(project string) string {
 	return filepath.Join(rollbackDir, project, "rollback")
@@ -68,7 +68,7 @@ func RestoreBackup(project string, log io.Writer) error {
 		}
 		rel, _ := filepath.Rel(filesDir, path)
 		dest := "/" + rel
-		fmt.Fprintf(log, "[simplecd] rollback: restoring %s\n", dest)
+		fmt.Fprintf(log, "[eacd] rollback: restoring %s\n", dest)
 		if mkErr := os.MkdirAll(filepath.Dir(dest), 0755); mkErr != nil {
 			return mkErr
 		}
@@ -85,7 +85,7 @@ func RestoreBackup(project string, log io.Writer) error {
 		json.Unmarshal(raw, &newFiles)
 	}
 	for _, f := range newFiles {
-		fmt.Fprintf(log, "[simplecd] rollback: removing new file %s\n", f)
+		fmt.Fprintf(log, "[eacd] rollback: removing new file %s\n", f)
 		os.Remove(f)
 	}
 
@@ -106,7 +106,12 @@ func copyFile(src, dst string) error {
 	}
 	defer in.Close()
 
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
 	if err != nil {
 		return err
 	}

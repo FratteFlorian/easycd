@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -13,10 +14,10 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/flo-mic/simplecd/internal/api"
-	"github.com/flo-mic/simplecd/internal/archive"
-	"github.com/flo-mic/simplecd/internal/config"
-	"github.com/flo-mic/simplecd/internal/delta"
+	"github.com/flo-mic/eacd/internal/api"
+	"github.com/flo-mic/eacd/internal/archive"
+	"github.com/flo-mic/eacd/internal/config"
+	"github.com/flo-mic/eacd/internal/delta"
 )
 
 // Deploy runs the deploy subcommand.
@@ -39,19 +40,19 @@ func Deploy(args []string, stdout, stderr io.Writer) error {
 	}
 
 	// Resolve token: env var takes precedence over config file
-	token := os.Getenv("SIMPLECD_TOKEN")
+	token := os.Getenv("EACD_TOKEN")
 	if token == "" && cfg.Token != "" {
-		fmt.Fprintln(stderr, "warning: token is hardcoded in .simplecd/config.yaml — consider using SIMPLECD_TOKEN env var instead")
+		fmt.Fprintln(stderr, "warning: token is hardcoded in .eacd/config.yaml — consider using EACD_TOKEN env var instead")
 		token = cfg.Token
 	}
 	if token == "" {
-		return fmt.Errorf("no auth token: set SIMPLECD_TOKEN or add 'token:' to .simplecd/config.yaml")
+		return fmt.Errorf("no auth token: set EACD_TOKEN or add 'token:' to .eacd/config.yaml")
 	}
 
 	// Run local pre-hook
 	if cfg.Hooks.LocalPre != "" {
 		hookPath := filepath.Join(projectDir, cfg.Hooks.LocalPre)
-		fmt.Fprintf(stdout, "[simplecd] Running local pre-hook: %s\n", hookPath)
+		fmt.Fprintf(stdout, "[eacd] Running local pre-hook: %s\n", hookPath)
 		if err := runLocalScript(hookPath, stdout, stderr); err != nil {
 			return fmt.Errorf("local pre-hook failed: %w", err)
 		}
@@ -72,10 +73,13 @@ func Deploy(args []string, stdout, stderr io.Writer) error {
 			if err != nil {
 				return err
 			}
+			rel, _ := filepath.Rel(srcDir, path)
 			if info.IsDir() {
+				if rel != "." && archive.ShouldExclude(rel, true, m.Exclude) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
-			rel, _ := filepath.Rel(srcDir, path)
 			if archive.ShouldExclude(rel, false, m.Exclude) {
 				return nil
 			}
@@ -124,7 +128,7 @@ func Deploy(args []string, stdout, stderr io.Writer) error {
 	for _, d := range checkResult.Upload {
 		needed[d] = true
 	}
-	fmt.Fprintf(stdout, "[simplecd] Files to upload: %d / %d\n", len(needed), len(allFiles))
+	fmt.Fprintf(stdout, "[eacd] Files to upload: %d / %d\n", len(needed), len(allFiles))
 
 	// Build manifest + archive
 	manifest := api.Manifest{Name: cfg.Name}
@@ -178,7 +182,7 @@ func Deploy(args []string, stdout, stderr io.Writer) error {
 	}
 
 	// Inventory
-	if inv, err := loadInventory(filepath.Join(projectDir, ".simplecd", "inventory.yaml")); err == nil && inv != nil {
+	if inv, err := loadInventory(filepath.Join(projectDir, ".eacd", "inventory.yaml")); err == nil && inv != nil {
 		manifest.Inventory = inv
 	}
 
@@ -192,19 +196,18 @@ func Deploy(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("building request body: %w", err)
 	}
 
-	fmt.Fprintf(stdout, "[simplecd] Deploying %s → %s\n", cfg.Name, cfg.Server)
+	fmt.Fprintf(stdout, "[eacd] Deploying %s → %s\n", cfg.Name, cfg.Server)
 	deployResp, err := httpPost(cfg.Server+"/deploy", token, contentType, body)
 	if err != nil {
 		return fmt.Errorf("deploy request: %w", err)
 	}
 	defer deployResp.Body.Close()
 
-	io.Copy(stdout, deployResp.Body)
-
 	if deployResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("deployment failed with status %d", deployResp.StatusCode)
+		errBody, _ := io.ReadAll(deployResp.Body)
+		return fmt.Errorf("deployment failed (%d): %s", deployResp.StatusCode, bytes.TrimSpace(errBody))
 	}
-	return nil
+	return streamAndCheck(deployResp.Body, stdout, "deployment failed (see output above)")
 }
 
 func httpPost(url, token, contentType string, body []byte) (*http.Response, error) {
@@ -243,4 +246,26 @@ func runLocalScript(scriptPath string, stdout, stderr io.Writer) error {
 	c.Stdout = stdout
 	c.Stderr = stderr
 	return c.Run()
+}
+
+// streamAndCheck streams r to out line-by-line and verifies the final
+// "[eacd] STATUS:OK" sentinel written by the server. The sentinel line
+// itself is not forwarded to out. Returns errMsg as error if the sentinel is absent.
+func streamAndCheck(r io.Reader, out io.Writer, errMsg string) error {
+	scanner := bufio.NewScanner(r)
+	var prev string
+	for scanner.Scan() {
+		if prev != "" {
+			fmt.Fprintln(out, prev)
+		}
+		prev = scanner.Text()
+	}
+	if prev == "[eacd] STATUS:OK" {
+		return nil
+	}
+	// Sentinel absent: print the last buffered line (real content) and report failure.
+	if prev != "" {
+		fmt.Fprintln(out, prev)
+	}
+	return fmt.Errorf("%s", errMsg)
 }

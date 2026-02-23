@@ -11,17 +11,17 @@ func reconcileService(name string, enabled bool, state string, log io.Writer) er
 	isEnabled, err := serviceIsEnabled(name)
 	if err != nil {
 		// Service might not exist yet if a package was just installed — non-fatal
-		fmt.Fprintf(log, "[simplecd] WARNING: cannot check service %s: %v\n", name, err)
+		fmt.Fprintf(log, "[eacd] WARNING: cannot check service %s: %v\n", name, err)
 		return nil
 	}
 
 	if enabled && !isEnabled {
-		fmt.Fprintf(log, "[simplecd] Enabling service: %s\n", name)
+		fmt.Fprintf(log, "[eacd] Enabling service: %s\n", name)
 		if err := runCmd(log, "systemctl", "enable", name); err != nil {
 			return err
 		}
 	} else if !enabled && isEnabled {
-		fmt.Fprintf(log, "[simplecd] Disabling service: %s\n", name)
+		fmt.Fprintf(log, "[eacd] Disabling service: %s\n", name)
 		if err := runCmd(log, "systemctl", "disable", name); err != nil {
 			return err
 		}
@@ -31,13 +31,13 @@ func reconcileService(name string, enabled bool, state string, log io.Writer) er
 	case "started":
 		isRunning, _ := serviceIsActive(name)
 		if !isRunning {
-			fmt.Fprintf(log, "[simplecd] Starting service: %s\n", name)
+			fmt.Fprintf(log, "[eacd] Starting service: %s\n", name)
 			return runCmd(log, "systemctl", "start", name)
 		}
 	case "stopped":
 		isRunning, _ := serviceIsActive(name)
 		if isRunning {
-			fmt.Fprintf(log, "[simplecd] Stopping service: %s\n", name)
+			fmt.Fprintf(log, "[eacd] Stopping service: %s\n", name)
 			return runCmd(log, "systemctl", "stop", name)
 		}
 	}

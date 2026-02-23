@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -45,13 +46,13 @@ func (c *Client) taskStatus(node, upid string) (*TaskStatus, error) {
 // urlEncodeUPID encodes colons in the UPID for use in URL paths.
 func urlEncodeUPID(upid string) string {
 	// Proxmox API expects the UPID percent-encoded in path segments
-	encoded := ""
+	var b strings.Builder
 	for _, c := range upid {
 		if c == ':' {
-			encoded += "%3A"
+			b.WriteString("%3A")
 		} else {
-			encoded += string(c)
+			b.WriteRune(c)
 		}
 	}
-	return encoded
+	return b.String()
 }

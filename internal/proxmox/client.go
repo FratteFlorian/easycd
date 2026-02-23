@@ -63,7 +63,7 @@ func (c *Client) get(path string, result interface{}) error {
 // post performs a POST request with form-encoded body and returns the raw "data" value.
 func (c *Client) post(path string, params url.Values) (string, error) {
 	encoded := params.Encode()
-	if os.Getenv("SIMPLECD_DEBUG") != "" {
+	if os.Getenv("EACD_DEBUG") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] POST %s\n[DEBUG] body: %s\n[DEBUG] auth header: %s\n", c.baseURL+path, encoded, maskToken(c.token))
 	}
 	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, bytes.NewBufferString(encoded))
@@ -80,7 +80,7 @@ func (c *Client) post(path string, params url.Values) (string, error) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if os.Getenv("SIMPLECD_DEBUG") != "" {
+	if os.Getenv("EACD_DEBUG") != "" {
 		fmt.Fprintf(os.Stderr, "[DEBUG] response: HTTP %d: %s\n", resp.StatusCode, body)
 	}
 	if resp.StatusCode >= 400 {

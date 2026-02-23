@@ -36,7 +36,7 @@ func PlaceFile(src, dest, modeStr string, log io.Writer) error {
 		return fmt.Errorf("copy to %s: %w", dest, err)
 	}
 
-	fmt.Fprintf(log, "[simplecd] Placed %s (mode %s)\n", dest, modeStr)
+	fmt.Fprintf(log, "[eacd] Placed %s (mode %s)\n", dest, modeStr)
 	return nil
 }
 

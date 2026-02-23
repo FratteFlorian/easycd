@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-const stateDir = "/var/lib/simplecd"
+const stateDir = "/var/lib/eacd"
 
 func projectStateDir(project string) string {
 	return filepath.Join(stateDir, project)

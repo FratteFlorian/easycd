@@ -9,7 +9,7 @@ import (
 )
 
 // ProxmoxConfig holds connection details for a Proxmox VE server.
-// Stored in ~/.config/simplecd/proxmox.yaml and shared across all projects.
+// Stored in ~/.config/eacd/proxmox.yaml and shared across all projects.
 type ProxmoxConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
@@ -23,7 +23,7 @@ func globalConfigDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "simplecd"), nil
+	return filepath.Join(home, ".config", "eacd"), nil
 }
 
 func proxmoxConfigPath() (string, error) {
@@ -34,7 +34,7 @@ func proxmoxConfigPath() (string, error) {
 	return filepath.Join(dir, "proxmox.yaml"), nil
 }
 
-// LoadProxmoxConfig reads ~/.config/simplecd/proxmox.yaml.
+// LoadProxmoxConfig reads ~/.config/eacd/proxmox.yaml.
 // Returns nil, nil if the file does not exist.
 func LoadProxmoxConfig() (*ProxmoxConfig, error) {
 	path, err := proxmoxConfigPath()
@@ -64,7 +64,7 @@ func LoadProxmoxConfig() (*ProxmoxConfig, error) {
 	return &cfg, nil
 }
 
-// SaveProxmoxConfig writes the config to ~/.config/simplecd/proxmox.yaml.
+// SaveProxmoxConfig writes the config to ~/.config/eacd/proxmox.yaml.
 func SaveProxmoxConfig(cfg *ProxmoxConfig) error {
 	dir, err := globalConfigDir()
 	if err != nil {

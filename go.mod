@@ -1,4 +1,4 @@
-module github.com/flo-mic/simplecd
+module github.com/flo-mic/eacd
 
 go 1.22
 
