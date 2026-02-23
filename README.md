@@ -270,11 +270,47 @@ Output goes to `dist/`.
 
 ---
 
+## Using simplecd with a public VPS
+
+The Proxmox wizard is Proxmox-specific, but `simplecdd` runs on any Linux host. If your target is a public VPS (DigitalOcean, Hetzner, Contabo, …), **don't expose port 8765 to the internet**. Use one of these approaches instead:
+
+**Option 1 — SSH tunnel**
+
+Forward port 8765 over SSH before deploying. No firewall changes needed.
+
+```sh
+# Open the tunnel in the background
+ssh -L 8765:localhost:8765 root@vps.example.com -N &
+TUNNEL_PID=$!
+
+# Point your config at localhost
+# server: http://localhost:8765
+
+simplecd deploy
+
+kill $TUNNEL_PID
+```
+
+**Option 2 — VPN (Tailscale / WireGuard)**
+
+Add both your dev machine and the VPS to the same VPN. The VPS gets a private VPN IP and simplecd behaves exactly like on a LAN — no extra steps per deploy.
+
+```sh
+# Install Tailscale on the VPS
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up
+
+# Use the Tailscale IP in your config
+# server: http://100.x.y.z:8765
+```
+
+---
+
 ## Philosophy
 
 - **One CT per project.** Each deployment target is an isolated LXC container — no shared state between projects.
 - **Opinionated, not extensible.** simplecd does one thing: get your build output onto a container and keep it running. For anything more complex, reach for Ansible or NixOS.
-- **No inbound ports.** The CT only needs to be reachable from your dev machine on port 8765. Expose your application port via Cloudflare Tunnel or a reverse proxy — simplecd itself does not require internet access.
+- **No inbound ports.** The target only needs to be reachable from your dev machine on port 8765. Expose your application port via Cloudflare Tunnel or a reverse proxy — simplecd itself does not require internet access.
 
 ---
 
