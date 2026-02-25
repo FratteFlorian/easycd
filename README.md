@@ -3,6 +3,8 @@
 A lightweight, opinionated continuous deployment tool for self-hosted projects.
 Push your build artifacts directly onto a Proxmox LXC container — no CI/CD platform, no Kubernetes, no cloud required.
 
+**Built for:** indie developers and homelab users who run a handful of self-hosted projects on Proxmox and want deployments to just work — without maintaining a CI/CD platform, a container orchestrator, or a fleet of YAML configs.
+
 ```
 eacd deploy
 [eacd] Files to upload: 3 / 42
@@ -432,6 +434,26 @@ tailscale up
 # Use the Tailscale IP in your config
 # server: http://100.x.y.z:8765
 ```
+
+---
+
+## Why not Ansible?
+
+Ansible is a great tool — but it solves a different problem.
+
+| | eacd | Ansible |
+|---|---|---|
+| **Transport** | HTTP (port 8765) | SSH (port 22) |
+| **Target requirements** | `eacdd` binary + systemd | Python + SSH daemon |
+| **Mental model** | push build artifacts | describe desired state |
+| **Scope** | one project, one CT | entire infrastructure |
+| **Overhead** | ~5 MB binary, one config YAML (+ optional inventory + optional hook scripts) | playbooks, roles, inventory, vault, … |
+
+eacd is not trying to replace Ansible. If you manage dozens of servers, enforce compliance, or need idempotent configuration management — use Ansible. eacd is for the simpler case: you built something, you want it running on a container, and you don't want to write a playbook for that.
+
+The same goes for Kubernetes + ArgoCD + self-hosted GitLab. That stack is powerful, but it also needs constant maintenance, consumes significant resources, and has a steep learning curve — a lot of overhead for a handful of personal projects. eacd has no cluster to babysit.
+
+> **Note:** Once `eacdd` is running, SSH is no longer needed for deployments. You can disable `sshd` on the CT entirely and only open port 8765 — eacd init is the only step that requires SSH.
 
 ---
 
