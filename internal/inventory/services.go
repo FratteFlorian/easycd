@@ -12,6 +12,15 @@ import (
 	"github.com/flo-mic/eacd/internal/api"
 )
 
+// dropinBaseDir is the base directory for systemd drop-ins.
+// Overridden in tests to a temp directory.
+var dropinBaseDir = "/etc/systemd/system"
+
+// daemonReload reloads the systemd daemon. Overridden in tests.
+var daemonReload = func(log io.Writer) error {
+	return runCmd(log, "systemctl", "daemon-reload")
+}
+
 // reconcileService ensures a systemd service is in the desired state,
 // including its environment drop-in.
 func reconcileService(svc api.InventoryService, log io.Writer) error {
@@ -65,7 +74,7 @@ func reconcileService(svc api.InventoryService, log io.Writer) error {
 // reconcileServiceEnv writes or removes the systemd drop-in for env vars.
 // Returns true if the drop-in was created, updated, or deleted.
 func reconcileServiceEnv(svc api.InventoryService, log io.Writer) (bool, error) {
-	dropinDir := fmt.Sprintf("/etc/systemd/system/%s.service.d", svc.Name)
+	dropinDir := filepath.Join(dropinBaseDir, svc.Name+".service.d")
 	dropinFile := filepath.Join(dropinDir, "eacd-env.conf")
 
 	if len(svc.Env) == 0 {
@@ -74,7 +83,7 @@ func reconcileServiceEnv(svc api.InventoryService, log io.Writer) (bool, error) 
 			if err := os.Remove(dropinFile); err != nil {
 				return false, fmt.Errorf("removing drop-in: %w", err)
 			}
-			if err := runCmd(log, "systemctl", "daemon-reload"); err != nil {
+			if err := daemonReload(log); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -82,20 +91,7 @@ func reconcileServiceEnv(svc api.InventoryService, log io.Writer) (bool, error) 
 		return false, nil
 	}
 
-	// Build drop-in content with sorted keys for stable comparison.
-	keys := make([]string, 0, len(svc.Env))
-	for k := range svc.Env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var b strings.Builder
-	b.WriteString("[Service]\n")
-	for _, k := range keys {
-		v := strings.ReplaceAll(svc.Env[k], `"`, `\"`)
-		fmt.Fprintf(&b, "Environment=\"%s=%s\"\n", k, v)
-	}
-	content := b.String()
+	content := buildDropinContent(svc.Env)
 
 	// Skip write if content unchanged.
 	if existing, err := os.ReadFile(dropinFile); err == nil && string(existing) == content {
@@ -109,10 +105,28 @@ func reconcileServiceEnv(svc api.InventoryService, log io.Writer) (bool, error) 
 	if err := os.WriteFile(dropinFile, []byte(content), 0644); err != nil {
 		return false, fmt.Errorf("writing drop-in: %w", err)
 	}
-	if err := runCmd(log, "systemctl", "daemon-reload"); err != nil {
+	if err := daemonReload(log); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// buildDropinContent builds the systemd drop-in file content for the given env map.
+// Keys are sorted for stable output.
+func buildDropinContent(env map[string]string) string {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	b.WriteString("[Service]\n")
+	for _, k := range keys {
+		v := strings.ReplaceAll(env[k], `"`, `\"`)
+		fmt.Fprintf(&b, "Environment=\"%s=%s\"\n", k, v)
+	}
+	return b.String()
 }
 
 func serviceIsEnabled(name string) (bool, error) {
