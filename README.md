@@ -112,28 +112,22 @@ The wizard:
 
 ### Option B — Existing server
 
-Install `eacdd` manually on any Linux host:
+Install `eacdd` on any Linux host with one command:
 
 ```sh
 make build
 
-# Copy the binary and service file
-scp dist/eacdd root@<host>:/usr/local/bin/eacdd
-scp install/eacdd.service root@<host>:/etc/systemd/system/
+eacd install-daemon --host 192.168.1.50
+# With a non-root user or specific key:
+# eacd install-daemon --host 192.168.1.50 --user ubuntu --key ~/.ssh/my_key
+```
 
-# Configure the daemon
-ssh root@<host> "
-  mkdir -p /etc/eacd /var/log/eacd /var/lib/eacd
-  cat > /etc/eacd/server.yaml <<'EOF'
-listen: :8765
-token: $(openssl rand -hex 32)
-log_dir: /var/log/eacd
-EOF
-  systemctl daemon-reload
-  systemctl enable --now eacdd
-"
+`install-daemon` copies the binary, installs the systemd unit, generates a random token,
+writes `/etc/eacd/server.yaml`, and updates your local `.eacd/config.yaml` automatically.
 
-# Then initialise your project locally
+Then run `eacd init` to finish the project configuration:
+
+```sh
 ./dist/eacd init
 # → "Create a new LXC container on Proxmox?" → No
 ```
@@ -195,6 +189,9 @@ services:
   - name: nginx
     enabled: true       # enable/disable on boot
     state: started      # "started" or "stopped"
+    env:                # optional: written as a systemd drop-in
+      DATABASE_URL: postgres://localhost/myapp
+      PORT: "8080"
 
 users:
   - name: appuser
@@ -308,15 +305,19 @@ Only one snapshot (the most recent deploy) is kept per project.
 ## Commands
 
 ```
-eacd init [--reinit]   Interactive wizard — creates .eacd/config.yaml
-eacd deploy            Deploy to the configured server
-eacd rollback          Restore the previous deployment snapshot
+eacd init [--reinit]                             Interactive wizard — creates .eacd/config.yaml
+eacd deploy                                      Deploy to the configured server
+eacd rollback                                    Restore the previous deployment snapshot
+eacd install-daemon --host <ip> [--user <user>]  Install eacdd on any Linux host via SSH
 ```
 
 | Flag | Command | Default | Description |
 |---|---|---|---|
 | `--reinit` / `-r` | `init` | false | Overwrite existing config |
 | `--dir <path>` | `deploy`, `rollback` | `.` | Project directory |
+| `--host <ip>` | `install-daemon` | — | Target host (required) |
+| `--user <user>` | `install-daemon` | `root` | SSH user |
+| `--key <path>` | `install-daemon` | auto-detect | SSH private key |
 
 ---
 

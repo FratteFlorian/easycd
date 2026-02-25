@@ -52,7 +52,7 @@ func Reconcile(project string, desired *api.Inventory, log io.Writer) error {
 
 	// --- Services ---
 	for _, svc := range desired.Services {
-		if err := reconcileService(svc.Name, svc.Enabled, svc.State, log); err != nil {
+		if err := reconcileService(svc, log); err != nil {
 			return fmt.Errorf("reconciling service %s: %w", svc.Name, err)
 		}
 	}

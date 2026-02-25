@@ -29,6 +29,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+	case "install-daemon":
+		if err := cmd.InstallDaemon(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		printUsage()
@@ -40,7 +45,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: eacd <command>")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  init [--reinit]  Initialize (or reinitialize) .eacd/ configuration")
-	fmt.Fprintln(os.Stderr, "  deploy           Deploy the project to the configured server")
-	fmt.Fprintln(os.Stderr, "  rollback         Restore the previous deployment snapshot")
+	fmt.Fprintln(os.Stderr, "  init [--reinit]                             Initialize (or reinitialize) .eacd/ configuration")
+	fmt.Fprintln(os.Stderr, "  deploy                                      Deploy the project to the configured server")
+	fmt.Fprintln(os.Stderr, "  rollback                                    Restore the previous deployment snapshot")
+	fmt.Fprintln(os.Stderr, "  install-daemon --host <ip> [--user <user>]  Install eacdd on any Linux host via SSH")
 }

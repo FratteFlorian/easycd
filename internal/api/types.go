@@ -58,9 +58,10 @@ type Inventory struct {
 
 // InventoryService describes a systemd service to manage.
 type InventoryService struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	State   string `json:"state"` // "started" or "stopped"
+	Name    string            `json:"name"              yaml:"name"`
+	Enabled bool              `json:"enabled"           yaml:"enabled"`
+	State   string            `json:"state"             yaml:"state"`    // "started" or "stopped"
+	Env     map[string]string `json:"env,omitempty"     yaml:"env,omitempty"`
 }
 
 // InventoryUser describes a system user to ensure exists.
