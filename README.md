@@ -189,6 +189,10 @@ services:
   - name: nginx
     enabled: true       # enable/disable on boot
     state: started      # "started" or "stopped"
+
+  - name: my-api
+    enabled: true
+    state: started
     env:                # optional: written as a systemd drop-in
       DATABASE_URL: postgres://localhost/myapp
       PORT: "8080"
